@@ -10,19 +10,40 @@
     <script src="//cdnjs.cloudflare.com/ajax/libs/socket.io/1.3.6/socket.io.min.js"></script>
     <script>
         var channel = "/chat";
- 
         var socket = io.connect('http://' + document.domain + ':' + location.port + channel);
  
         socket.on('connect', function() {
-            socket.emit('my_connection', {data: 'I\'m connected!'});
+            //console.log(socket);
+
+            var author = $.cookie("realtime-chat-nickname");
+            var author_id = $.cookie("realtime-chat-client-id");
+            console.log(socket.id);
+            socket.emit('connected', {data: {username : author, id : author_id}});
         });
  
-        socket.on("message", function (message) {
+        socket.on("message", function(message) {
             refreshMessages(message);
         });
- 
+
+        socket.on("connection", function(socket_){
+            console.log("connection finfo "+socket_);
+        });
+    
+        socket.on("addToUserList", function(message){
+            updateUserList(message.data.username, true);
+        });
+
+        function updateUserList(user, add){
+            if(add){
+                $(".user-list").append('<li class="media"><div class="media-body"><div class="media"><div class="media-body">'
+                +user+' <span class="label label-success">Active</span></div></div></div></li>');
+                return;
+            }
+            //remove user          
+        };
+
         function refreshMessages(message) {
-            $(".media-list").append('<li class="media"><div class="media-body"><div class="media"><div class="media-body">'
+            $("#r_0").append('<li class="media"><div class="media-body"><div class="media"><div class="media-body" style="font-size: 1.25em;">'
                 + message.data.message + '<br/><small class="text-muted">' + message.data.author + ' | ' + new Date($.now())+ '</small><hr/></div></div></div></li>');
         }
  
@@ -42,8 +63,27 @@
                     }
                 });
             }
- 
-            function sendMessage() {
+            
+            $('#rooms').on("click", function(){
+                 $.ajax({
+                  url: '/rooms',
+                  type: 'GET',
+                  success: function(response) {
+                      if(response !== null){
+                        $('#rooms_data').html('');
+                        $.each(response.rooms, function(idx, room){
+                            $('#rooms_data').append('<button class="dropdown-item" type="button" onclick="loadRoom('+room.id+')">'+room.title+'</button> <br/>')
+                            $('#messages').append('<ul class="media-list" id=r_"'+room.id+'"></ul>');
+                        });
+                      }
+                  },
+                  error: function(error) {
+                      console.log(error);
+                  }
+              });
+            });
+
+        function sendMessage() {
                 $container = $('.media-list');
                 $container[0].scrollTop = $container[0].scrollHeight;
                 var message = $("#messageText").val();
@@ -53,6 +93,12 @@
                 $container.animate({ scrollTop: $container[0].scrollHeight }, "slow");
             }
         });
+
+        function loadRoom(room_id){
+            $('.media-list').hide();
+            $('#r_'+room_id).show();
+        };
+
     </script>
     <link href="//maxcdn.bootstrapcdn.com/bootstrap/3.2.0/css/bootstrap.min.css" rel="stylesheet">
     <link href="//maxcdn.bootstrapcdn.com/font-awesome/4.1.0/css/font-awesome.min.css" rel="stylesheet">
@@ -71,22 +117,40 @@
     <div class="row " style="padding-top:40px;">
         <h3 class="text-center">Chattty</h3>
         <br/><br/>
- 
-        <div class="col-md-12">
+                
+        <div class="col-md-2 pull-xs-left">
+            <div class="panel panel-info">
+                <div class="panel-heading">
+                    <strong><span class="glyphicon glyphicon-list"></span> Connected</strong>
+                </div>
+                <div class="panel-body fixed-panel">
+                    <ul class="user-list">
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-9 pull-xs-right">
             <div class="panel panel-info">
                 <div class="panel-heading">
                     <strong><span class="glyphicon glyphicon-list"></span> Chat History</strong>
+<!--                     <span class="dropdown">
+                      <button class="btn btn-secondary dropdown-toggle" type="button" id="rooms" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
+                        Rooms
+                      </button>
+                      <div class="dropdown-menu" aria-labelledby="rooms" id="rooms_data">
+                      </div>
+                    </span> -->
                 </div>
-                <div class="panel-body fixed-panel">
-                    <ul class="media-list">
-                    </ul>
+                <div class="panel-body fixed-panel" id="messages">
+                    <ul class="media-list" id="r_0"></ul>
                 </div>
                 <div class="panel-footer">
                     <div class="input-group">
                         <input type="text" class="form-control" placeholder="Enter Message" id="messageText" autofocus/>
-                                    <span class="input-group-btn">
-                                        <button class="btn btn-info" type="button" id="sendMessage">SEND <span class="glyphicon glyphicon-send"></span></button>
-                                    </span>
+                        <span class="input-group-btn">
+                            <button class="btn btn-info" type="button" id="sendMessage">SEND <span class="glyphicon glyphicon-send"></span></button>
+                        </span>
                     </div>
                 </div>
             </div>
