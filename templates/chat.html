@@ -11,14 +11,13 @@
     <script>
         var channel = "/chat";
         var socket = io.connect('http://' + document.domain + ':' + location.port + channel);
- 
-        socket.on('connect', function() {
-            //console.log(socket);
+        var author = null;
+        var windowFocused = false;
 
-            var author = $.cookie("realtime-chat-nickname");
+        socket.on('connect', function() {
             var author_id = $.cookie("realtime-chat-client-id");
-            console.log(socket.id);
-            socket.emit('connected', {data: {username : author, id : author_id}});
+            if(author)
+                socket.emit('connected', {data: {'username' : author}});
         });
  
         socket.on("message", function(message) {
@@ -29,22 +28,45 @@
             console.log("connection finfo "+socket_);
         });
     
-        socket.on("addToUserList", function(message){
-            updateUserList(message.data.username, true);
+        socket.on("updateUserList", function(message){
+            updateUserList(message.data);
         });
 
-        function updateUserList(user, add){
-            if(add){
-                $(".user-list").append('<li class="media"><div class="media-body"><div class="media"><div class="media-body">'
-                +user+' <span class="label label-success">Active</span></div></div></div></li>');
+        function updateUserList(users){
+
+            if(users == null || users.length == 0)
                 return;
-            }
-            //remove user          
+
+            $(".user-list").html('');
+            
+            for(var i = 0; i<users.length; i++){
+                $(".user-list").append('<li class="media"><div class="media-body"><div class="media"><div class="media-body">'
+                +users[i]+' <span class="label label-success">Active</span></div></div></div></li>');
+            }        
         };
 
-        function refreshMessages(message) {
-            $("#r_0").append('<li class="media"><div class="media-body"><div class="media"><div class="media-body" style="font-size: 1.25em;">'
-                + message.data.message + '<br/><small class="text-muted">' + message.data.author + ' | ' + new Date($.now())+ '</small><hr/></div></div></div></li>');
+        function refreshMessages(messages) {
+            if($("#r_0").text()==''){
+                //new user so added history
+                $.each(messages.data, function(idx, val){
+                    addMessage(val, true);
+                });
+            }else{
+                //already connected user so append message
+                addMessage(messages.data, false);
+            }
+            
+        }
+
+        function addMessage(message, newuser){
+            if(typeof message.message !== 'undefined' && typeof message.author !== 'undefined'){
+                $("#r_0").append('<li class="media"><div class="media-body"><div class="media"><div class="media-body" style="font-size: 1.25em;">'
+                    + message.message + '<br/><small class="text-muted">' + message.author + ' | ' + new Date($.now())+ '</small><hr/></div></div></div></li>');
+
+                if(windowFocused==false && newuser==false){
+                    notify(message.author);
+                }
+            }
         }
  
         $(function(){
@@ -52,6 +74,8 @@
             if (typeof $.cookie("realtime-chat-nickname") === 'undefined') {
                 window.location = "/login"
             } else {
+                author = $.cookie("realtime-chat-nickname");
+
                 $("#sendMessage").on("click", function() {
                     sendMessage()
                 });
@@ -87,7 +111,6 @@
                 $container = $('.media-list');
                 $container[0].scrollTop = $container[0].scrollHeight;
                 var message = $("#messageText").val();
-                var author = $.cookie("realtime-chat-nickname");
                 socket.emit('message', {data: {message: message, author: author}});
                 $("#messageText").val("");
                 $container.animate({ scrollTop: $container[0].scrollHeight }, "slow");
@@ -99,6 +122,50 @@
             $('#r_'+room_id).show();
         };
 
+
+        $(window).on('beforeunload', function(){
+            if(author)
+                return 'If you close, refresh or navigate away from this page; you will be disconnected';
+        });
+
+        $(window).on('unload', function(){
+            socket.emit('disconnected', {data: {'username' : author}});
+        });
+
+        document.onload = function (){
+            if (Notification.permission !== "granted")
+                Notification.requestPermission();
+        };
+
+        window.onfocus = function() {
+            windowFocused = true;
+        };
+
+        window.onblur = function() {
+            windowFocused = false;
+        };
+
+        function notify(author) {
+            if (!Notification) {
+                alert('Desktop notification is not available in your browser.'); 
+                return;
+            }
+
+            if (Notification.permission !== "granted"){
+                Notification.requestPermission();
+            }
+            else {
+                var notification = new Notification('Chattty Notification', {
+                  icon: 'http://cdn.sstatic.net/stackexchange/img/logos/so/so-icon.png',
+                  body: 'New message from '+author,
+                });
+
+                notification.onclick = function () {
+                  window.open('http://' + document.domain + ':' + location.port);      
+                };
+              
+            }
+         };
     </script>
     <link href="//maxcdn.bootstrapcdn.com/bootstrap/3.2.0/css/bootstrap.min.css" rel="stylesheet">
     <link href="//maxcdn.bootstrapcdn.com/font-awesome/4.1.0/css/font-awesome.min.css" rel="stylesheet">
@@ -142,8 +209,8 @@
                       </div>
                     </span> -->
                 </div>
-                <div class="panel-body fixed-panel" id="messages">
-                    <ul class="media-list" id="r_0"></ul>
+                <div class="panel-body fixed-panel" id="messages" style="overflow-y: scroll;">
+                    <ul class="media-list" id="r_0" style="word-wrap: break-word;"></ul>
                 </div>
                 <div class="panel-footer">
                     <div class="input-group">
